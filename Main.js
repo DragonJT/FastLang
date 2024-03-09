@@ -49,10 +49,14 @@ var program = [
     new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log(i);'),
     new FunctionSyntax(true, 'void', 'Main', [], [
         Assign('i', '6'),
-        Loop('loop'),
+        Loop('loop1'),
+        Loop('loop2'),
         Assign('i', 'i + 1'),
         Call('Print', ['i']),
-        BrIf('loop', 'i < 10'),
+        BrIf('loop2', 'i < 10'),
+        Call('Print', ['i * 2']),
+        BrIf('loop1', 'i < 15'),
+        End(),
         End(),
     ])
 ];

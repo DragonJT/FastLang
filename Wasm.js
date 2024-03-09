@@ -136,7 +136,6 @@ function WasmImportFunc(returnType, name, parameterTypes){
 }
 
 function Wasm(importFunctions, functions){
-    console.log(functions);
     const flatten = (arr) => [].concat.apply([], arr);
     
     // https://webassembly.github.io/spec/core/binary/modules.html#sections

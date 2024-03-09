@@ -7,6 +7,18 @@ function Assign(name, expression){
     return new AssignSyntax(name, Parse(Tokenizer(expression)));
 }
 
+function BrIf(label, condition){
+    return new BrIfSyntax(label, Parse(Tokenizer(condition)));
+}
+
+function Loop(label){
+    return new LoopSyntax(label);
+}
+
+function End(){
+    return new EndSyntax();
+}
+
 function RunWasm(program){
     var importFunctions = program.filter(p=>p.constructor.name == 'ImportFunctionSyntax');
     var functions = program.filter(p=>p.constructor.name == 'FunctionSyntax');
@@ -36,8 +48,12 @@ function RunWasm(program){
 var program = [
     new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log(i);'),
     new FunctionSyntax(true, 'void', 'Main', [], [
-        Assign('x', '5 - 2'),
-        Call('Print', ['45 - 10 * x']),
+        Assign('i', '6'),
+        Loop('loop'),
+        Assign('i', 'i + 1'),
+        Call('Print', ['i']),
+        BrIf('loop', 'i < 10'),
+        End(),
     ])
 ];
 

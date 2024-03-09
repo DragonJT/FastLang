@@ -10,6 +10,58 @@ function GetReturnValtype(type){
     return [GetValtype(type)];
 }
 
+class LoopSyntax{
+    constructor(label){
+        this.label = label;
+    }
+
+    FindJumpTos(blockStack){
+        blockStack.push(this.label);
+    }
+
+    ToWasm(){
+        return [Opcode.loop, Blocktype.void];
+    }
+}
+
+class BrIfSyntax{
+    constructor(label, condition){
+        this.label = label;
+        this.condition = condition;
+    }
+
+    FindJumpTos(blockStack){
+        var i = blockStack.length-1;
+        while(true){
+            if(i<0){
+                throw 'Block not found with label: '+this.label;
+            }
+            if(blockStack[i] == this.label){
+                this.jumpTo = blockStack.length - 1 - i;
+                break;
+            }
+            i--;
+        }
+    }
+
+    ToWasm(program, variables){
+        return [...this.condition.ToWasm(program, variables), Opcode.br_if, ...unsignedLEB128(this.jumpTo)];
+    }
+}
+
+class EndSyntax{
+    FindJumpTos(blockStack){
+        if(blockStack.length == 0){
+            throw 'blockstack empty... too many ends';
+        }
+        blockStack.pop();
+    }
+
+    ToWasm(){
+        return [Opcode.end];
+    }
+}
+
 class ParameterSyntax{
     constructor(type, name){
         this.type = type;
@@ -51,6 +103,8 @@ class BinaryOpSyntax{
             if(op=='-'){ return Opcode.i32_sub; }
             if(op=='*'){ return Opcode.i32_mul; }
             if(op=='/'){ return Opcode.i32_div_s; }
+            if(op=='<'){ return Opcode.i32_lt; }
+            if(op=='>'){ return Opcode.i32_gt; }
             throw 'op not found: '+op;
         }
         return [...this.left.ToWasm(program, variables), ...this.right.ToWasm(program, variables), OpToWasm(this.op)];
@@ -128,6 +182,16 @@ class FunctionSyntax{
                 }
             }
         }
+        var blockStack = [];
+        for(var s of this.body){
+            if(s.FindJumpTos){
+                s.FindJumpTos(blockStack);
+            }
+        }
+        if(blockStack.length>0){
+            throw 'not enough block ends... '+JSON.stringify(blockStack);
+        }
+
         var codeBytes = [...this.body.map(s=>s.ToWasm(program, variables)).flat(), Opcode.end];
         return WasmFunc(this.export, 
             GetReturnValtype(this.returnType), 

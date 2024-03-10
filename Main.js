@@ -1,22 +1,6 @@
 
-function Call(name, args){
-    return new CallSyntax(name, args.map(a=>Parse(Tokenizer(a))));
-}
-
-function Assign(name, expression){
-    return new AssignSyntax(name, Parse(Tokenizer(expression)));
-}
-
-function BrIf(label, condition){
-    return new BrIfSyntax(label, Parse(Tokenizer(condition)));
-}
-
-function Loop(label){
-    return new LoopSyntax(label);
-}
-
-function End(){
-    return new EndSyntax();
+function _Function(_export, returnType, name, parameters, code){
+    return new FunctionSyntax(_export, returnType, name, parameters, ParseFunctionBody(code));
 }
 
 function RunWasm(program){
@@ -47,18 +31,18 @@ function RunWasm(program){
 
 var program = [
     new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log(i);'),
-    new FunctionSyntax(true, 'void', 'Main', [], [
-        Assign('i', '6'),
-        Loop('loop1'),
-        Loop('loop2'),
-        Assign('i', 'i + 1'),
-        Call('Print', ['i']),
-        BrIf('loop2', 'i < 10'),
-        Call('Print', ['i * 2']),
-        BrIf('loop1', 'i < 15'),
-        End(),
-        End(),
-    ])
+    _Function(true, 'void', 'Main', [], `
+        i = 6
+        loop loop1
+            loop loop2
+                i = i + 1
+                Print(i)
+                br_if loop2 (i < 10)
+                Print(i * 2)
+                br_if loop1 (i < 12)
+            end
+        end
+    `),
 ];
 
 RunWasm(program);

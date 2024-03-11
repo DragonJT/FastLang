@@ -39,6 +39,9 @@ class CastSyntax{
         if(this.type == 'i32' && this.fromType == 'f32'){
             return [...this.expression.ToWasm(), Opcode.i32_trunc_f32_s];
         }
+        else if(this.type == 'f32' && this.fromType == 'i32'){
+            return [...this.expression.ToWasm(), Opcode.f32_convert_i32_s];
+        }
         throw 'Cant cast from '+this.fromType+' to '+this.type;
     }
 }
@@ -168,7 +171,7 @@ class BinaryOpSyntax{
             return this.type;
         }
         else{
-            throw 'Types dont match: '+left+' '+right;
+            throw 'Types dont match: '+left+' '+this.op+' '+right;
         }
     }
 
@@ -351,6 +354,6 @@ class ImportFunctionSyntax{
     }
 
     ToWasm(){
-        return WasmImportFunc(GetReturnValtype(this.returnType), this.name, this.parameters.map(p=>GetValtype(p.type)));
+        return WasmImportFunc(GetReturnValtype(this.returnType), 'f'+this.id+'_'+this.name, this.parameters.map(p=>GetValtype(p.type)));
     }
 }

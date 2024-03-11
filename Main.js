@@ -15,12 +15,14 @@ function RunWasm(program){
         f.id = id;
         id++;
     }
-    var wasmBytes = Wasm(importFunctions.map(f=>f.ToWasm()), functions.map(f=>f.ToWasm(program)));
+    var wasmImportFunctions = importFunctions.map(f=>f.ToWasm());
+    var wasmBytes = Wasm(wasmImportFunctions, functions.map(f=>f.ToWasm(program)));
     
     var importObject = {env:{}};
     importObject.env.memory = new WebAssembly.Memory({ initial: 10, maximum: 10 });
-    for(var f of importFunctions){
-        importObject.env[f.name] = new Function(...f.parameters.map(p=>p.name), f.code);
+    for(var i=0;i<importFunctions.length;i++){
+        var f = importFunctions[i];
+        importObject.env[wasmImportFunctions[i].name] = new Function(...f.parameters.map(p=>p.name), f.code);
     }
     WebAssembly.instantiate(wasmBytes, importObject).then(
         (obj) => {
@@ -30,20 +32,11 @@ function RunWasm(program){
 }
 
 var program = [
-    new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log(i);'),
+    new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log("Int:"+i);'),
+    new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('f32', 'i')], 'console.log("Float:"+i);'),
     _Function(true, 'void', 'Main', [], `
-        var i = 6
-        var x = 10
-        loop loop1
-            loop loop2
-                i = i + 1
-                Print(i)
-                br_if loop2 (i < x)
-                Print(i * 2)
-                br_if loop1 (i < 12)
-            end
-        end
-        Print(x)
+        Print(4.5)
+        Print(2)
     `),
 ];
 

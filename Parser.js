@@ -134,7 +134,10 @@ function ParseExpression(tokens){
     else if(tokens.length == 2){
         var t1 = tokens[0];
         var t2 = tokens[1];
-        if(t1.type == 'varname' && t2.type == '()'){
+        if(t1.type == '()'){
+            return new CastSyntax(t1.value[0].value, ParseExpression(t2.value));
+        }
+        else if(t1.type == 'varname' && t2.type == '()'){
             return new CallSyntax(t1.value, GetArgs(t2.value));
         }
     }

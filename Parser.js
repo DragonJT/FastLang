@@ -158,6 +158,9 @@ function ParseFunctionBody(code){
             if(l[0].value == 'loop'){
                 body.push(new LoopSyntax(l[1].value));
             }
+            else if(l[0].value == 'var'){
+                body.push(new VarSyntax(l[1].value, ParseExpression(l.slice(3))));
+            }
             else if(l[0].value == 'end'){
                 body.push(new EndSyntax());
             }

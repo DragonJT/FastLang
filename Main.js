@@ -32,16 +32,18 @@ function RunWasm(program){
 var program = [
     new ImportFunctionSyntax('void', 'Print', [new ParameterSyntax('i32', 'i')], 'console.log(i);'),
     _Function(true, 'void', 'Main', [], `
-        i = 6
+        var i = 6
+        var x = 10
         loop loop1
             loop loop2
                 i = i + 1
                 Print(i)
-                br_if loop2 (i < 10)
+                br_if loop2 (i < x)
                 Print(i * 2)
                 br_if loop1 (i < 12)
             end
         end
+        Print(x)
     `),
 ];
 

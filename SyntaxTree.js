@@ -10,9 +10,46 @@ function GetReturnValtype(type){
     return [GetValtype(type)];
 }
 
+class ParameterSyntax{
+    constructor(type, name){
+        this.type = type;
+        this.name = name;
+    }
+}
+
+class LocalSyntax{
+    constructor(type, name){
+        this.type = type;
+        this.name = name;
+    }
+}
+
+class CastSyntax{
+    constructor(type, expression){
+        this.type = type;
+        this.expression = expression;
+    }
+
+    CalcType(program, variables){
+        this.fromType = this.expression.CalcType(program, variables);
+        return this.type;
+    }
+
+    ToWasm(){
+        if(this.type == 'i32' && this.fromType == 'f32'){
+            return [...this.expression.ToWasm(), Opcode.i32_trunc_f32_s];
+        }
+        throw 'Cant cast from '+this.fromType+' to '+this.type;
+    }
+}
+
 class LoopSyntax{
     constructor(label){
         this.label = label;
+    }
+
+    CalcType(){
+        return 'void';
     }
 
     FindJumpTos(blockStack){
@@ -24,10 +61,39 @@ class LoopSyntax{
     }
 }
 
+class VarSyntax{
+    constructor(name, expression){
+        this.name = name;
+        this.expression = expression;
+    }
+
+    CalcType(program, variables){
+        var type = this.expression.CalcType(program, variables);
+        if(type == 'void'){
+            throw 'Local shouldnt have void type';
+        }
+        this.local = new LocalSyntax(type, this.name);
+        variables.push(this.local);
+        return 'void';
+    }
+
+    ToWasm(){
+        return [...this.expression.ToWasm(), Opcode.set_local, ...unsignedLEB128(this.local.id)];
+    }
+}
+
 class BrIfSyntax{
     constructor(label, condition){
         this.label = label;
         this.condition = condition;
+    }
+
+    CalcType(program, variables){
+        var type = this.condition.CalcType(program, variables);
+        if(type != 'bool'){
+            throw 'Expecting bool for br_if statement: '+type; 
+        }
+        return 'void';
     }
 
     FindJumpTos(blockStack){
@@ -50,6 +116,10 @@ class BrIfSyntax{
 }
 
 class EndSyntax{
+    CalcType(){
+        return 'void';
+    }
+
     FindJumpTos(blockStack){
         if(blockStack.length == 0){
             throw 'blockstack empty... too many ends';
@@ -62,31 +132,21 @@ class EndSyntax{
     }
 }
 
-class ParameterSyntax{
-    constructor(type, name){
-        this.type = type;
-        this.name = name;
-    }
-}
-
-class LocalSyntax{
-    constructor(type, name){
-        this.type = type;
-        this.name = name;
-    }
-}
-
 class IdentifierSyntax{
     constructor(name){
         this.name = name;
     }
 
-    ToWasm(_, variables){
-        var id = variables.findIndex(v=>v.name == this.name);
-        if(id<0){
-            throw 'Cant find variable with name: '+this.name;
+    CalcType(_program, variables){
+        this.variable = variables.find(v=>v.name == this.name);
+        if(!this.variable){
+            throw 'Identifier: Cant find variable with name: '+this.name;
         }
-        return [Opcode.get_local, ...unsignedLEB128(id)];
+        return this.variable.type;
+    }
+
+    ToWasm(){
+        return [Opcode.get_local, ...unsignedLEB128(this.variable.id)];
     }
 }
 
@@ -97,23 +157,56 @@ class BinaryOpSyntax{
         this.op = op;
     }
 
-    ToWasm(program, variables){
-        function OpToWasm(op){
-            if(op=='+'){ return Opcode.i32_add; }
-            if(op=='-'){ return Opcode.i32_sub; }
-            if(op=='*'){ return Opcode.i32_mul; }
-            if(op=='/'){ return Opcode.i32_div_s; }
-            if(op=='<'){ return Opcode.i32_lt; }
-            if(op=='>'){ return Opcode.i32_gt; }
-            throw 'op not found: '+op;
+    CalcType(program, variables){
+        var left = this.left.CalcType(program, variables);
+        var right = this.right.CalcType(program, variables);
+        if(left == right){
+            this.type = left;
+            if(this.op == '<' || this.op == '>'){
+                return 'bool';
+            }
+            return this.type;
         }
-        return [...this.left.ToWasm(program, variables), ...this.right.ToWasm(program, variables), OpToWasm(this.op)];
+        else{
+            throw 'Types dont match: '+left+' '+right;
+        }
+    }
+
+    ToWasm(){
+        function OpToWasm(op, type){
+            if(type == 'i32'){
+                if(op=='+'){ return Opcode.i32_add; }
+                if(op=='-'){ return Opcode.i32_sub; }
+                if(op=='*'){ return Opcode.i32_mul; }
+                if(op=='/'){ return Opcode.i32_div_s; }
+                if(op=='<'){ return Opcode.i32_lt; }
+                if(op=='>'){ return Opcode.i32_gt; }
+                throw 'op not found: '+op;
+            }
+            else if(type == 'f32'){
+                if(op=='+'){ return Opcode.f32_add; }
+                if(op=='-'){ return Opcode.f32_sub; }
+                if(op=='*'){ return Opcode.f32_mul; }
+                if(op=='/'){ return Opcode.f32_div; }
+                if(op=='<'){ return Opcode.f32_lt; }
+                if(op=='>'){ return Opcode.f32_gt; }
+                throw 'op not found: '+op;
+            }
+            else{
+                throw 'Cant operate on type: '+this.type;
+            }
+        }
+        return [...this.left.ToWasm(), ...this.right.ToWasm(), OpToWasm(this.op, this.type)];
     }
 }
 
 class IntConstSyntax{
     constructor(value){
         this.value = value;
+    }
+
+    CalcType(){
+        return 'i32';
     }
 
     ToWasm(){
@@ -124,6 +217,10 @@ class IntConstSyntax{
 class FloatConstSyntax{
     constructor(value){
         this.value = value;
+    }
+
+    CalcType(){
+        return 'f32';
     }
 
     ToWasm(){
@@ -137,15 +234,33 @@ class CallSyntax{
         this.args = args;
     }
 
-    ToWasm(program, variables){
-        var args = this.args.map(a=>a.ToWasm(program, variables)).flat();
-        var func = program.find(f=>f.name == this.name);
-        if(func){
-            return [...args, Opcode.call, ...unsignedLEB128(func.id)];
+    CalcType(program, variables){
+        function CompareArgsAndParameters(args, parameters){
+            if(args.length != parameters.length){
+                return false;
+            }
+            for(var i=0;i<args.length;i++){
+                if(args[i] != parameters[i].type){
+                    return false;
+                }
+            }
+            return true;
         }
-        else{
+        var argTypes = this.args.map(a=>a.CalcType(program, variables));
+        var funcs = program.filter(f=>f.name == this.name);
+        if(funcs.length == 0){
             throw 'Cant find function with name: '+this.name;
         }
+        this.func = funcs.find(f=>CompareArgsAndParameters(argTypes, f.parameters));
+        if(this.func){
+            return this.func.returnType;
+        }
+        throw 'Cant find function with matching arg types'+JSON.stringify(argTypes);
+    }
+
+    ToWasm(){
+        var args = this.args.map(a=>a.ToWasm()).flat();
+        return [...args, Opcode.call, ...unsignedLEB128(this.func.id)];
     }
 }
 
@@ -155,12 +270,17 @@ class AssignSyntax{
         this.expression = expression;
     }
 
-    ToWasm(program, variables){
-        var id = variables.findIndex(v=>v.name == this.name);
-        if(id<0){
-            throw 'Cant find variable with name: '+this.name;
+    CalcType(program, variables){
+        this.variable = variables.find(v=>v.name == this.name);
+        if(!this.variable){
+            throw 'Assign: Cant find variable with name: '+this.name;
         }
-        return [...this.expression.ToWasm(program, variables), Opcode.set_local, ...unsignedLEB128(id)];
+        this.expression.CalcType(program, variables);
+        return 'void';
+    }
+
+    ToWasm(){
+        return [...this.expression.ToWasm(), Opcode.set_local, ...unsignedLEB128(this.variable.id)];
     }
 }
 
@@ -176,12 +296,32 @@ class FunctionSyntax{
     ToWasm(program){
         var variables = [...this.parameters];
         for(var s of this.body){
-            if(s.constructor.name == 'AssignSyntax'){
-                if(!variables.includes(v=>v.name==s.name)){
-                    variables.push(new LocalSyntax('i32', s.name));
-                }
-            }
+            s.CalcType(program, variables)
         }
+
+        var i32s = variables.filter(v=>v.constructor.name == 'LocalSyntax' && (v.type == 'i32' || v.type == 'bool'));
+        var f32s = variables.filter(v=>v.constructor.name == 'LocalSyntax' && v.type == 'f32s');
+        var id = 0;
+        for(var p of this.parameters){
+            p.id = id;
+            id++;
+        }
+        for(var v of i32s){
+            v.id = id;
+            id++;
+        }
+        for(var v of f32s){
+            v.id = id;
+            id++;
+        }
+        var wasmLocals = [];
+        if(i32s.length > 0){
+            wasmLocals.push(new WasmLocals(i32s.length, Valtype.i32));
+        }
+        if(f32s.length > 0){
+            wasmLocals.push(new WasmLocals(f32s.length, Valtype.f32));
+        }
+
         var blockStack = [];
         for(var s of this.body){
             if(s.FindJumpTos){
@@ -189,15 +329,15 @@ class FunctionSyntax{
             }
         }
         if(blockStack.length>0){
-            throw 'not enough block ends... '+JSON.stringify(blockStack);
+            throw 'Not enough block ends... '+JSON.stringify(blockStack);
         }
 
-        var codeBytes = [...this.body.map(s=>s.ToWasm(program, variables)).flat(), Opcode.end];
+        var codeBytes = [...this.body.map(s=>s.ToWasm()).flat(), Opcode.end];
         return WasmFunc(this.export, 
             GetReturnValtype(this.returnType), 
             this.name, 
             this.parameters.map(p=>GetValtype(p.type)), 
-            [new WasmLocals(variables.length - this.parameters.length, Valtype.i32)], 
+            wasmLocals, 
             codeBytes);
     }
 }
